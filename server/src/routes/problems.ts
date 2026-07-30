@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express"
 import { getPool } from "../db/connection.ts"
 import { requireAuth } from "../middleware/auth.ts"
-import { requireProjectRead, requireProjectWrite } from "../middleware/rbac.ts"
+import { requireRole, requireProjectRead, requireProjectWrite } from "../middleware/rbac.ts"
 
 const router = Router()
 
@@ -114,6 +114,33 @@ router.patch("/:projectId/problems/:id/status", requireAuth, requireProjectWrite
       return
     }
     res.json({ message: status === "valid" ? "已保留" : "已设为待定" })
+  } catch {
+    res.status(500).json({ error: "服务器错误" })
+  }
+})
+
+// Move problem to different project (root only)
+router.patch("/:projectId/problems/:id/project", requireAuth, requireRole("root"), async (req: Request, res: Response) => {
+  const { project_id } = req.body
+  if (!project_id) {
+    res.status(400).json({ error: "缺少目标项目ID" })
+    return
+  }
+  try {
+    const [proj] = await getPool().query("SELECT id FROM projects WHERE id = ?", [project_id]) as [any[], any]
+    if (proj.length === 0) {
+      res.status(404).json({ error: "目标项目不存在" })
+      return
+    }
+    const [result] = await getPool().query(
+      "UPDATE problems SET project_id = ? WHERE id = ? AND project_id = ?",
+      [project_id, req.params.id, req.params.projectId]
+    ) as [any, any]
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: "问题不存在" })
+      return
+    }
+    res.json({ message: "已移动到目标项目" })
   } catch {
     res.status(500).json({ error: "服务器错误" })
   }

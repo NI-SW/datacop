@@ -1,5 +1,6 @@
 import express from "express"
 import cors from "cors"
+import path from "path"
 import { initPool } from "./db/connection.ts"
 import { initDB } from "./db/schema.ts"
 import authRoutes from "./routes/auth.ts"
@@ -11,9 +12,9 @@ import settingRoutes from "./routes/settings.ts"
 import indexRoutes from "./routes/index.ts"
 
 const app = express()
-const PORT = 3001
+const PORT = parseInt(process.env.PORT || "3001", 10)
 
-app.use(cors({ origin: "http://localhost:5173", credentials: true }))
+app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173", credentials: true }))
 app.use(express.json())
 
 app.use("/api/auth", authRoutes)
@@ -23,6 +24,13 @@ app.use("/api/projects", documentRoutes)
 app.use("/api/projects", problemRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/settings", settingRoutes)
+
+// Serve frontend static files in production
+const publicDir = path.resolve("public")
+app.use(express.static(publicDir))
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"))
+})
 
 initPool()
 initDB()

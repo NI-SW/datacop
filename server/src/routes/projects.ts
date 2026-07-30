@@ -8,13 +8,16 @@ const router = Router()
 // List projects visible to current user
 router.get("/", requireAuth, async (req: Request, res: Response) => {
   try {
+    const countSubs = `,
+      (SELECT COUNT(*) FROM problems WHERE project_id = p.id AND status = 'pending') AS pending_count,
+      (SELECT COUNT(*) FROM problems WHERE project_id = p.id AND status = 'valid') AS valid_count`
     if (req.user!.role === "root" || req.user!.role === "admin") {
-      const [rows] = await getPool().query("SELECT * FROM projects ORDER BY created_at DESC") as [any[], any]
+      const [rows] = await getPool().query(`SELECT p.*${countSubs} FROM projects p ORDER BY p.created_at DESC`) as [any[], any]
       res.json(rows)
       return
     }
     const [rows] = await getPool().query(
-      `SELECT DISTINCT p.* FROM projects p
+      `SELECT DISTINCT p.*${countSubs} FROM projects p
        LEFT JOIN project_members pm ON p.id = pm.project_id AND pm.user_id = ?
        WHERE pm.user_id IS NOT NULL OR p.operator_id = ?`,
       [req.user!.id, req.user!.id]

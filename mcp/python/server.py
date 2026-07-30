@@ -51,7 +51,9 @@ _env_map = {
     "MCP_JWT_SECRET":  ("jwt_secret", str),
     "DB_HOST":         ("db.host", str),
     "DB_PORT":         ("db.port", int),
+    "DB_USER":         ("db.user", str),
     "DB_PASSWORD":     ("db.password", str),
+    "DB_DATABASE":     ("db.database", str),
 }
 for env_key, (cfg_path, cast) in _env_map.items():
     val = os.environ.get(env_key)

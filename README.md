@@ -109,3 +109,22 @@ RBAC 中间件位于 `server/src/middleware/rbac.ts`，通过 `requireRole()` �
 - Schema 迁移使用幂等方式 (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE` guard)，可安全重复执行
 - `problems` 表无外键约束，`project_id` 仅有索引
 - 上传的中文文件名通过 `fixFilename()` 从 latin1 转换为 utf8
+
+## 群聊问题总结提示词
+```
+总结一下群聊内部的问题，对于已经有确切解决方案的问题，按如下格式输出文本：
+[
+{
+"name": "问题名称（必填）",
+"description": "问题描述",
+"scenario": "应用场景",
+"trigger_method": "触发方式",
+"symptoms": "问题症状",
+"cause": "问题原因",
+"solution": "解决方案",
+"verification": "验证方式",
+"notes": "备注",
+"status": "pending"
+}, { ... ... } 
+]
+```

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import api from "../api/client"
+import { useAuth } from "../context/AuthContext"
 
 interface Problem {
   id: number
@@ -14,8 +15,14 @@ interface Problem {
   verification: string
   notes: string
   status: string
+  project_id: number
   created_by: number
   created_at: string
+}
+
+interface ProjectOption {
+  id: number
+  name: string
 }
 
 const SEARCH_FIELDS = [
@@ -40,6 +47,8 @@ const STATUS_OPTIONS = [
 export default function ProblemList() {
   const { id } = useParams<{ id: string }>()
   const nav = useNavigate()
+  const { user } = useAuth()
+  const isRoot = user?.role === "root"
   const [problems, setProblems] = useState<Problem[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<number | null>(null)
@@ -51,6 +60,9 @@ export default function ProblemList() {
   const [statusFilter, setStatusFilter] = useState("")
   const [totalCount, setTotalCount] = useState(0)
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>()
+  const [allProjects, setAllProjects] = useState<ProjectOption[]>([])
+  const [movingId, setMovingId] = useState<number | null>(null)
+  const [targetProject, setTargetProject] = useState<string>("")
 
   // debounce keyword input
   useEffect(() => {
@@ -58,6 +70,12 @@ export default function ProblemList() {
     debounceTimer.current = setTimeout(() => setDebouncedKeyword(keyword), 300)
     return () => clearTimeout(debounceTimer.current)
   }, [keyword])
+
+  // load all projects for root users
+  useEffect(() => {
+    if (!isRoot) return
+    api.get("/projects").then(({ data }) => setAllProjects(data.map((p: any) => ({ id: p.id, name: p.name })))).catch(() => {})
+  }, [isRoot])
 
   const loadProblems = useCallback((q?: string, field?: string, status?: string) => {
     setLoading(true)
@@ -147,6 +165,18 @@ export default function ProblemList() {
 
   const importRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
+
+  const handleMove = async (problemId: number) => {
+    if (!targetProject) return
+    try {
+      await api.patch(`/projects/${id}/problems/${problemId}/project`, { project_id: Number(targetProject) })
+      setMovingId(null)
+      setTargetProject("")
+      loadProblems(debouncedKeyword || undefined, searchField || undefined, statusFilter || undefined)
+    } catch (err: any) {
+      alert(err?.response?.data?.error || "移动失败")
+    }
+  }
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -321,6 +351,44 @@ export default function ProblemList() {
                         >
                           撤回保留
                         </button>
+                      )}
+                      {isRoot && (
+                        movingId === p.id ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={targetProject}
+                              onChange={(e) => setTargetProject(e.target.value)}
+                              style={{ height: 28, fontSize: 12, padding: "0 6px", borderRadius: 4, border: "1px solid var(--gray-300)" }}
+                            >
+                              <option value="">选择项目</option>
+                              {allProjects.filter((proj) => proj.id !== Number(id)).map((proj) => (
+                                <option key={proj.id} value={proj.id}>{proj.name}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleMove(p.id)}
+                              disabled={!targetProject}
+                              className="btn btn-sm btn-primary"
+                              style={{ height: 28, fontSize: 12 }}
+                            >
+                              确认
+                            </button>
+                            <button
+                              onClick={() => { setMovingId(null); setTargetProject("") }}
+                              className="btn btn-sm btn-outline"
+                              style={{ height: 28, fontSize: 12 }}
+                            >
+                              取消
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setMovingId(p.id); setTargetProject("") }}
+                            className="btn btn-outline btn-sm"
+                          >
+                            更改项目
+                          </button>
+                        )
                       )}
                     </div>
                   </div>

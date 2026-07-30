@@ -8,6 +8,8 @@ interface Project {
   description: string
   operator_id: number | null
   created_at: string
+  pending_count: number
+  valid_count: number
 }
 
 export default function Dashboard() {
@@ -50,6 +52,10 @@ export default function Dashboard() {
                     {p.description || "暂无描述"}
                   </p>
                 </div>
+              </div>
+              <div style={{ display: "flex", gap: 16, fontSize: 12 }}>
+                <span style={{ color: "#f59e0b", fontWeight: 500 }}>待定: {p.pending_count}</span>
+                <span style={{ color: "#10b981", fontWeight: 500 }}>有效: {p.valid_count}</span>
               </div>
               <div style={{ borderTop: "1px solid var(--gray-100)", paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--gray-400)" }}>
                 <span>{new Date(p.created_at).toLocaleDateString()}</span>
