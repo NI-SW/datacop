@@ -207,6 +207,98 @@ Authorization: Bearer <token>
 
 ---
 
+### GET `/api/projects/export/problems` — 批量导出项目问题集
+**权限:** root, admin
+
+查询参数：
+- `ids`: 逗号分隔的项目 ID，如 `?ids=1,2,3`
+
+响应 (200)：与批量导入格式兼容，可直接用于 `/api/projects/import`
+```json
+{
+  "projects": [
+    {
+      "id": 2,
+      "name": "stream-knowleged",
+      "description": "stream-questions",
+      "operator_id": 2,
+      "operator_username": "stream",
+      "operator_role": "operator",
+      "problems": [
+        {
+          "id": 538,
+          "name": "问题名称",
+          "description": "问题简介",
+          "scenario": "问题场景",
+          "trigger_method": "触发方式",
+          "symptoms": "问题症状",
+          "cause": "问题原因",
+          "solution": "解决方案",
+          "verification": "验证方式",
+          "notes": "备注",
+          "status": "pending|valid",
+          "created_at": "2026-07-28T10:16:21.000Z"
+        }
+      ]
+    }
+  ]
+}
+```
+
+错误响应：
+- 400: `{ "error": "请选择要导出的项目" }`
+
+---
+
+### POST `/api/projects/import` — 批量导入项目
+**权限:** root
+
+请求体（支持 `projects` 数组或直接数组；`operator` 可为字符串用户名或 `{ username, password }` 对象；未提供密码时使用默认密码 `Info@1234`）：
+```json
+{
+  "projects": [
+    {
+      "name": "新项目",
+      "description": "项目描述",
+      "operator_username": "zhangsan",
+      "operator_role": "operator",
+      "problems": [
+        {
+          "name": "问题名称",
+          "description": "问题简介",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}
+```
+
+导入规则：
+- 每个项目必须有 `name`，否则跳过
+- `operator_username` 对应的用户不存在时自动创建（全局角色取 `operator_role` 或 `operator.role`，缺省 `operator`；密码为默认密码 `Info@1234`，文件可指定 `operator.password` 覆盖）；已存在则复用且不修改密码、不修改角色
+- 自动将操作员加入 `project_members`（角色 `operator`）
+- `problems` 数组可选，`status` 仅 `valid`/`pending` 有效，其余默认 `pending`
+
+成功响应 (201)：
+```json
+{
+  "message": "成功导入 2 个项目、3 个问题",
+  "created_users": ["zhangsan"],
+  "reused_users": [],
+  "imported_projects": 2,
+  "imported_problems": 3,
+  "results": [
+    { "name": "新项目", "project_id": 16, "operator_username": "zhangsan", "user_created": true }
+  ]
+}
+```
+
+错误响应：
+- 400: `{ "error": "导入文件中没有项目数据" }`
+
+---
+
 ## 4. 项目成员 (`/api/projects/:projectId/members`)
 
 ### GET `/api/projects/:projectId/members` — 成员列表
@@ -251,119 +343,7 @@ Authorization: Bearer <token>
 
 ---
 
-## 5. 文档管理 (`/api/projects/:projectId/documents`)
-
-### GET `/api/projects/:projectId/documents` — 文档列表
-**权限:** 项目成员 / root / admin
-
-响应 (200)：
-```json
-[
-  {
-    "id": 1,
-    "project_id": 2,
-    "filename": "1785116962664-abc123.pdf",
-    "original_name": "i2StreamDM同步手册.pdf",
-    "size": 524288,
-    "mime_type": "application/pdf",
-    "status": "pending",
-    "content_text": null,
-    "cleaned_content": null,
-    "created_at": "2026-07-27T...",
-    "updated_at": "2026-07-27T..."
-  }
-]
-```
-
----
-
-### POST `/api/projects/:projectId/documents/upload` — 上传文档
-**权限:** 项目 operator / root / admin
-**Content-Type:** `multipart/form-data`
-
-参数：
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| file | File | 文件（最大 50MB） |
-
-成功响应 (201)：`{ "id": 1, "message": "上传成功" }`
-
-支持的文本清洗格式：txt, csv, log, md, json, xml, html, pdf, docx
-
----
-
-### GET `/api/projects/:projectId/documents/:id` — 文档详情
-**权限:** 项目成员 / root / admin
-
-响应 (200)：同列表项结构
-
----
-
-### GET `/api/projects/:projectId/documents/:id/download` — 下载文档
-**权限:** 项目成员 / root / admin
-
-响应：文件流（`Content-Disposition: attachment; filename*=UTF-8''...`）
-
----
-
-### PUT `/api/projects/:projectId/documents/:id` — 更新文档内容
-**权限:** 项目 operator / root / admin
-
-请求体：
-```json
-{
-  "cleaned_content": "清洗后的文本内容",
-  "original_name": "新文件名.pdf"
-}
-```
-
-`cleaned_content` 不传则只改名，`original_name` 不传则只改内容。
-
-成功响应 (200)：`{ "message": "更新成功" }`
-
----
-
-### POST `/api/projects/:projectId/documents/:id/clean` — 清洗文档
-**权限:** 项目 operator / root / admin
-
-自动提取文本（txt/pdf/docx），支持 GBK/UTF-8 编码自动检测。
-
-成功响应 (200)：
-```json
-{
-  "message": "清洗完成",
-  "content_text": "提取出的文本内容..."
-}
-```
-
----
-
-### POST `/api/projects/:projectId/documents/:id/flag` — 标记文档状态
-**权限:** 项目 operator / root / admin
-
-请求体：
-```json
-{
-  "status": "problematic"
-}
-```
-
-状态值：`problematic` | `eliminated`
-
-成功响应 (200)：`{ "message": "状态更新成功" }`
-
----
-
-### DELETE `/api/projects/:projectId/documents/:id` — 删除文档
-**权限:** 项目 operator / root / admin
-
-删除文件 + 数据库记录。
-
-成功响应 (200)：`{ "message": "删除成功" }`
-
----
-
-## 6. 问题管理 (`/api/projects/:projectId/problems`)
+## 5. 问题管理 (`/api/projects/:projectId/problems`)
 
 ### GET `/api/projects/:projectId/problems` — 问题列表（支持搜索和筛选）
 **权限:** 项目成员 / root / admin
@@ -474,6 +454,26 @@ GET /api/projects/2/problems?q=部署&status=pending
 
 ---
 
+### PATCH `/api/projects/:projectId/problems/project` — 批量更改问题所属项目
+**权限:** root
+
+请求体：
+```json
+{
+  "ids": [1, 2, 3],
+  "project_id": 5
+}
+```
+
+成功响应 (200)：`{ "message": "已移动 3 个问题到目标项目" }`
+
+错误响应：
+- 400: `{ "error": "请选择要移动的问题" }`
+- 400: `{ "error": "缺少目标项目ID" }`
+- 404: `{ "error": "目标项目不存在" }`
+
+---
+
 ### DELETE `/api/projects/:projectId/problems` — 批量删除问题
 **权限:** 项目 operator / root / admin
 
@@ -488,7 +488,7 @@ GET /api/projects/2/problems?q=部署&status=pending
 
 ---
 
-## 7. 系统设置 (`/api/settings`)
+## 6. 系统设置 (`/api/settings`)
 
 ### GET `/api/settings` — 获取所有设置
 **权限:** root
@@ -549,22 +549,6 @@ GET /api/projects/2/problems?q=部署&status=pending
 | created_at | TIMESTAMP | 添加时间 |
 
 唯一约束：`(project_id, user_id)`
-
-### documents
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INT PK | 文档ID |
-| project_id | INT FK | 所属项目 |
-| filename | VARCHAR(255) | 存储文件名（时间戳+随机） |
-| original_name | VARCHAR(255) | 原始文件名 |
-| file_path | VARCHAR(500) | 文件存储路径 |
-| size | BIGINT | 文件大小（字节） |
-| mime_type | VARCHAR(100) | MIME 类型 |
-| status | ENUM | pending / cleaned / problematic / eliminated |
-| content_text | LONGTEXT | 自动提取的文本 |
-| cleaned_content | LONGTEXT | 人工修正的文本 |
-| created_at | TIMESTAMP | 上传时间 |
-| updated_at | TIMESTAMP | 更新时间 |
 
 ### problems
 | 字段 | 类型 | 说明 |

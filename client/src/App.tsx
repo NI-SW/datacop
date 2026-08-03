@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom"
 import { AuthProvider } from "./context/AuthContext"
 import ProtectedRoute from "./components/ProtectedRoute"
 import Layout from "./components/Layout"
@@ -6,8 +6,6 @@ import ProjectLayout from "./components/ProjectLayout"
 import Login from "./pages/Login"
 import Register from "./pages/Register"
 import Dashboard from "./pages/Dashboard"
-import ProjectDetail from "./pages/ProjectDetail"
-import DocumentView from "./pages/DocumentView"
 import ProblemList from "./pages/ProblemList"
 import ProblemForm from "./pages/ProblemForm"
 import ProblemEdit from "./pages/ProblemEdit"
@@ -15,6 +13,11 @@ import UserManagement from "./pages/admin/UserManagement"
 import ProjectManagement from "./pages/admin/ProjectManagement"
 import ProjectSettings from "./pages/admin/ProjectSettings"
 import SystemSettings from "./pages/admin/SystemSettings"
+
+function ProjectRedirect() {
+  const { id } = useParams()
+  return <Navigate to={`/projects/${id}/problems`} replace />
+}
 
 export default function App() {
   return (
@@ -26,9 +29,8 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
-              <Route path="/projects/:id/documents/:docId" element={<DocumentView />} />
               <Route element={<ProjectLayout />}>
-                <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/projects/:id" element={<ProjectRedirect />} />
                 <Route path="/projects/:id/problems" element={<ProblemList />} />
                 <Route path="/projects/:id/problems/new" element={<ProblemForm />} />
                 <Route path="/projects/:id/problems/:problemId/edit" element={<ProblemEdit />} />

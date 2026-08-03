@@ -2,7 +2,7 @@
 
 ## What this is
 
-DataCop — a knowledge base management system with document upload/clean and problem tracking per project. Two separate packages: `server/` (Express + TypeScript) and `client/` (React + Vite + TypeScript). Not a monorepo/workspace — no shared root lockfile.
+DataCop — a knowledge base management system with problem tracking per project. Two separate packages: `server/` (Express + TypeScript) and `client/` (React + Vite + TypeScript). Not a monorepo/workspace — no shared root lockfile.
 
 ## Commands
 
@@ -27,8 +27,7 @@ cd client && npx tsc --noEmit
 - **Database**: MySQL at `192.168.34.65:3306`, database `datacop`. Connection pool in `db/connection.ts` uses a lazy `getPool()` pattern — must call `initPool()` before `initDB()` in `index.ts`.
 - **Schema migrations** run inside `db/schema.ts` `initDB()` on every server start. Uses `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE` to idempotently add columns/indexes. Existing tables are never recreated, only patched.
 - **`problems` table has no foreign keys** — all FK constraints were intentionally removed. `project_id` still has an index for query performance but no cascade.
-- **File uploads** stored at `server/uploads/` via multer. Max 50MB. Chinese filenames are decoded from latin1→utf8 via `fixFilename()`.
-- **Text extraction** for document cleaning uses `jschardet` + `iconv-lite` for encoding detection (supports GBK/UTF-8), `pdf-parse` for PDF, `mammoth` for DOCX.
+- **Document/file processing was removed** — no `documents` table, uploads dir, or multer/pdf-parse/mammoth deps. The project page redirects directly to its problems list.
 - **Auth**: JWT tokens in `Authorization: Bearer <token>` header. Default root account: `root` / `admin123` (seeded on first start).
 - **RBAC middleware** in `middleware/rbac.ts`: `requireRole()` checks global role; `requireProjectRead/Write()` checks project access via `projects.operator_id` first, then `project_members` table.
 

@@ -1,9 +1,12 @@
 import { Router, Request, Response } from "express"
+import bcrypt from "bcryptjs"
 import { getPool } from "../db/connection.ts"
 import { requireAuth } from "../middleware/auth.ts"
 import { requireRole, requireProjectRead } from "../middleware/rbac.ts"
 
 const router = Router()
+
+const DEFAULT_IMPORT_PASSWORD = "Info@1234"
 
 // List projects visible to current user
 router.get("/", requireAuth, async (req: Request, res: Response) => {
@@ -41,6 +44,145 @@ router.post("/", requireAuth, requireRole("root", "admin"), async (req: Request,
       [name, description || null, operator_id || null]
     ) as [any, any]
     res.status(201).json({ id: result.insertId, message: "创建成功" })
+  } catch {
+    res.status(500).json({ error: "服务器错误" })
+  }
+})
+
+// Batch export problems of selected projects (root/admin)
+router.get("/export/problems", requireAuth, requireRole("root", "admin"), async (req: Request, res: Response) => {
+  try {
+    const idsParam = typeof req.query.ids === "string" ? req.query.ids : ""
+    const ids = idsParam.split(",").map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0)
+    if (ids.length === 0) {
+      res.status(400).json({ error: "请选择要导出的项目" })
+      return
+    }
+    const placeholders = ids.map(() => "?").join(",")
+    const [projects] = await getPool().query(
+      `SELECT p.id, p.name, p.description, p.operator_id, u.username AS operator_username, u.role AS operator_role
+       FROM projects p LEFT JOIN users u ON u.id = p.operator_id
+       WHERE p.id IN (${placeholders}) ORDER BY p.id`,
+      ids
+    ) as [any[], any]
+    const data: any[] = []
+    for (const p of projects) {
+      const [problems] = await getPool().query(
+        `SELECT id, name, description, scenario, trigger_method, symptoms, cause, solution, verification, notes, status, created_at
+         FROM problems WHERE project_id = ? ORDER BY created_at DESC`,
+        [p.id]
+      ) as [any[], any]
+      data.push({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        operator_id: p.operator_id,
+        operator_username: p.operator_username,
+        operator_role: p.operator_role,
+        problems,
+      })
+    }
+    res.json({ projects: data })
+  } catch {
+    res.status(500).json({ error: "服务器错误" })
+  }
+})
+
+// Batch import projects (root only): auto-creates users with default password when missing
+router.post("/import", requireAuth, requireRole("root"), async (req: Request, res: Response) => {
+  const { projects } = req.body
+  if (!Array.isArray(projects) || projects.length === 0) {
+    res.status(400).json({ error: "导入文件中没有项目数据" })
+    return
+  }
+  try {
+    const results: any[] = []
+    const createdUsers: string[] = []
+    const reusedUsers: string[] = []
+    let importedProjects = 0
+    let importedProblems = 0
+
+    for (const item of projects) {
+      const name = String(item?.name || "").trim()
+      if (!name) continue
+      try {
+        const opUsername = String(
+          item.operator_username ||
+          (typeof item.operator === "string" ? item.operator : item.operator?.username) || ""
+        ).trim()
+        const opPassword = String(
+          typeof item.operator === "object" && item.operator ? item.operator.password || "" : ""
+        ).trim() || DEFAULT_IMPORT_PASSWORD
+
+        // Role to apply when creating a new user: from export (operator_role / operator.role), default 'operator'
+        const opRole = String(
+          item.operator_role ||
+          (typeof item.operator === "object" && item.operator ? item.operator.role || "" : "") ||
+          ""
+        ).trim() || "operator"
+        const allowedRoles = ["root", "admin", "operator", "user"]
+        const role = allowedRoles.includes(opRole) ? opRole : "operator"
+
+        let operatorId: number | null = null
+        let userCreated = false
+        if (opUsername) {
+          const [existing] = await getPool().query("SELECT id FROM users WHERE username = ?", [opUsername]) as [any[], any]
+          if (existing.length > 0) {
+            operatorId = existing[0].id
+            reusedUsers.push(opUsername)
+          } else {
+            const hash = await bcrypt.hash(opPassword, 10)
+            const [userResult] = await getPool().query(
+              "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+              [opUsername, hash, role]
+            ) as [any, any]
+            operatorId = userResult.insertId
+            createdUsers.push(opUsername)
+            userCreated = true
+          }
+        }
+
+        const [projResult] = await getPool().query(
+          "INSERT INTO projects (name, description, operator_id) VALUES (?, ?, ?)",
+          [name, item.description || null, operatorId]
+        ) as [any, any]
+        const projectId = projResult.insertId
+        importedProjects++
+
+        if (operatorId) {
+          await getPool().query(
+            "INSERT INTO project_members (project_id, user_id, role) VALUES (?, ?, 'operator') ON DUPLICATE KEY UPDATE role = 'operator'",
+            [projectId, operatorId]
+          )
+        }
+
+        if (Array.isArray(item.problems)) {
+          for (const p of item.problems) {
+            if (!p?.name) continue
+            const status = p.status === "valid" ? "valid" : "pending"
+            await getPool().query(
+              `INSERT INTO problems (project_id, name, description, scenario, trigger_method, symptoms, cause, solution, verification, notes, status, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [projectId, p.name, p.description || null, p.scenario || null, p.trigger_method || null, p.symptoms || null, p.cause || null, p.solution || null, p.verification || null, p.notes || null, status, operatorId || req.user!.id]
+            )
+            importedProblems++
+          }
+        }
+
+        results.push({ name, project_id: projectId, operator_username: opUsername || null, user_created: userCreated })
+      } catch {
+        results.push({ name, error: "导入失败" })
+      }
+    }
+
+    res.status(201).json({
+      message: `成功导入 ${importedProjects} 个项目、${importedProblems} 个问题`,
+      created_users: createdUsers,
+      reused_users: reusedUsers,
+      imported_projects: importedProjects,
+      imported_problems: importedProblems,
+      results,
+    })
   } catch {
     res.status(500).json({ error: "服务器错误" })
   }

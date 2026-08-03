@@ -146,6 +146,34 @@ router.patch("/:projectId/problems/:id/project", requireAuth, requireRole("root"
   }
 })
 
+// Batch move problems to different project (root only)
+router.patch("/:projectId/problems/project", requireAuth, requireRole("root"), async (req: Request, res: Response) => {
+  const { ids, project_id } = req.body
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: "请选择要移动的问题" })
+    return
+  }
+  if (!project_id) {
+    res.status(400).json({ error: "缺少目标项目ID" })
+    return
+  }
+  try {
+    const [proj] = await getPool().query("SELECT id FROM projects WHERE id = ?", [project_id]) as [any[], any]
+    if (proj.length === 0) {
+      res.status(404).json({ error: "目标项目不存在" })
+      return
+    }
+    const placeholders = ids.map(() => "?").join(",")
+    const [result] = await getPool().query(
+      `UPDATE problems SET project_id = ? WHERE id IN (${placeholders}) AND project_id = ?`,
+      [project_id, ...ids, req.params.projectId]
+    ) as [any, any]
+    res.json({ message: `已移动 ${result.affectedRows} 个问题到目标项目` })
+  } catch {
+    res.status(500).json({ error: "服务器错误" })
+  }
+})
+
 // Delete single problem
 router.delete("/:projectId/problems/:id", requireAuth, requireProjectWrite, async (req: Request, res: Response) => {
   try {

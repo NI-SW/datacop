@@ -45,23 +45,9 @@ export async function initDB() {
     ) ENGINE=InnoDB
   `)
 
-  await conn.query(`
-    CREATE TABLE IF NOT EXISTS documents (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      project_id INT NOT NULL,
-      filename VARCHAR(255) NOT NULL,
-      original_name VARCHAR(255) NOT NULL,
-      file_path VARCHAR(500) NOT NULL,
-      size BIGINT NOT NULL DEFAULT 0,
-      mime_type VARCHAR(100),
-      status ENUM('pending', 'cleaned', 'problematic', 'eliminated') NOT NULL DEFAULT 'pending',
-      content_text LONGTEXT,
-      cleaned_content LONGTEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB
-  `)
+  // documents table removed — file processing feature deleted
+  await conn.query("DROP TABLE IF EXISTS documents")
+  console.log("Dropped documents table (feature removed)")
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS problems (

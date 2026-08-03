@@ -6,7 +6,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-Info@1234}
       MYSQL_DATABASE: datacop
     volumes:
-      - mysql_data:/var/lib/mysql
+      - datacop_mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -15,6 +15,7 @@ services:
       start_period: 30s
 
   server:
+    image: libm/datacop:server
     build:
       context: .
       dockerfile: Dockerfile
@@ -33,6 +34,7 @@ services:
         condition: service_healthy
 
   mcp:
+    image: libm/datacop:mcp
     build:
       context: ./mcp/python
       dockerfile: Dockerfile
@@ -51,4 +53,4 @@ services:
         condition: service_healthy
 
 volumes:
-  mysql_data:
+  datacop_mysql_data:

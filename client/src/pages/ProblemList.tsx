@@ -63,6 +63,7 @@ export default function ProblemList() {
   const [allProjects, setAllProjects] = useState<ProjectOption[]>([])
   const [movingId, setMovingId] = useState<number | null>(null)
   const [targetProject, setTargetProject] = useState<string>("")
+  const [batchMoving, setBatchMoving] = useState(false)
 
   // debounce keyword input
   useEffect(() => {
@@ -142,9 +143,23 @@ export default function ProblemList() {
     try {
       await api.delete(`/projects/${id}/problems`, { data: { ids: [...selected] } })
       setSelected(new Set())
+      setBatchMoving(false)
       loadProblems(keyword, searchField, statusFilter)
     } catch {}
     setDeleting(false)
+  }
+
+  const handleBatchMove = async () => {
+    if (selected.size === 0 || !targetProject) return
+    try {
+      await api.patch(`/projects/${id}/problems/project`, { ids: [...selected], project_id: Number(targetProject) })
+      setBatchMoving(false)
+      setTargetProject("")
+      setSelected(new Set())
+      loadProblems(debouncedKeyword || undefined, searchField || undefined, statusFilter || undefined)
+    } catch (err: any) {
+      alert(err?.response?.data?.error || "移动失败")
+    }
   }
 
   const handleExport = async (status?: string) => {
@@ -203,6 +218,28 @@ export default function ProblemList() {
             <button onClick={handleBatchDelete} disabled={deleting} className="btn btn-danger">
               {deleting ? "删除中..." : `删除选中 (${selected.size})`}
             </button>
+          )}
+          {selected.size > 0 && isRoot && (
+            batchMoving ? (
+              <div className="flex gap" style={{ alignItems: "center" }}>
+                <select value={targetProject} onChange={(e) => setTargetProject(e.target.value)} style={{ height: 40 }}>
+                  <option value="">选择目标项目</option>
+                  {allProjects.filter((proj) => proj.id !== Number(id)).map((proj) => (
+                    <option key={proj.id} value={proj.id}>{proj.name}</option>
+                  ))}
+                </select>
+                <button onClick={handleBatchMove} disabled={!targetProject} className="btn btn-primary">
+                  确认移动
+                </button>
+                <button onClick={() => { setBatchMoving(false); setTargetProject("") }} className="btn btn-outline">
+                  取消
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => { setBatchMoving(true); setMovingId(null); setTargetProject("") }} className="btn btn-outline">
+                批量更改项目
+              </button>
+            )
           )}
           <button onClick={() => handleExport()} className="btn btn-outline">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

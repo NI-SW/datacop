@@ -1,6 +1,6 @@
 # DataCop
 
-知识库管理系统，支持文档上传/清洗和项目级问题跟踪。
+知识库管理系统，支持项目级问题跟踪。
 
 ## 技术栈
 
@@ -10,8 +10,6 @@
 | 后端 | Express 4 + TypeScript (ESM, tsx) |
 | 数据库 | MySQL |
 | 认证 | JWT (Bearer Token) |
-| 文件上传 | Multer (最大 50MB) |
-| 文本提取 | pdf-parse (PDF) / mammoth (DOCX) / jschardet + iconv-lite (编码检测) |
 
 ## 项目结构
 
@@ -27,7 +25,6 @@ datacop/
 │       ├── routes/      # API 路由
 │       ├── db/          # 数据库连接与 Schema
 │       ├── middleware/   # RBAC 权限中间件
-│       └── uploads/     # 文件上传存储
 ├── docs/            # API 文档
 └── mcp/             # MCP 集成
 ```
@@ -93,7 +90,6 @@ RBAC 中间件位于 `server/src/middleware/rbac.ts`，通过 `requireRole()` �
 ## 主要功能
 
 - **项目管理** — 创建和管理多个知识库项目
-- **文档上传与清洗** — 支持 PDF、DOCX、TXT 等格式，自动编码检测与文本提取
 - **问题跟踪** — 每个项目独立的问题列表，支持创建、编辑、状态管理
 - **用户与权限** — 多角色 RBAC，项目级别的成员管理
 - **系统设置** — 可配置的全局参数
@@ -108,7 +104,6 @@ RBAC 中间件位于 `server/src/middleware/rbac.ts`，通过 `requireRole()` �
 - 数据库连接池采用懒加载模式，必须先调用 `initPool()` 再调用 `initDB()`
 - Schema 迁移使用幂等方式 (`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE` guard)，可安全重复执行
 - `problems` 表无外键约束，`project_id` 仅有索引
-- 上传的中文文件名通过 `fixFilename()` 从 latin1 转换为 utf8
 
 ## 群聊问题总结提示词
 ```
