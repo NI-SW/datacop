@@ -84,6 +84,22 @@ export async function initDB() {
     ) ENGINE=InnoDB
   `)
 
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS mcp_api_keys (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      key_hash CHAR(64) NOT NULL COMMENT 'SHA-256 hex of the API key',
+      key_prefix VARCHAR(20) NOT NULL COMMENT 'display prefix for identification',
+      user_id INT NOT NULL,
+      enabled TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_used_at TIMESTAMP NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_mcp_keys_hash (key_hash),
+      INDEX idx_mcp_keys_user (user_id)
+    ) ENGINE=InnoDB
+  `)
+
   // seed root user if not exists
   const [rows] = await conn.query("SELECT id FROM users WHERE username = 'root'") as [any[], any]
   if (rows.length === 0) {

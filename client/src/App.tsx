@@ -13,6 +13,7 @@ import UserManagement from "./pages/admin/UserManagement"
 import ProjectManagement from "./pages/admin/ProjectManagement"
 import ProjectSettings from "./pages/admin/ProjectSettings"
 import SystemSettings from "./pages/admin/SystemSettings"
+import ApiKeyManagement from "./pages/admin/ApiKeyManagement"
 
 function ProjectRedirect() {
   const { id } = useParams()
@@ -39,6 +40,7 @@ export default function App() {
               <Route path="/admin/projects" element={<ProjectManagement />} />
               <Route path="/admin/projects/:id/settings" element={<ProjectSettings />} />
               <Route path="/admin/settings" element={<SystemSettings />} />
+              <Route path="/admin/mcp-keys" element={<ApiKeyManagement />} />
             </Route>
           </Route>
         </Routes>

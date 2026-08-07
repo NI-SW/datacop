@@ -36,8 +36,6 @@ export default function ProjectSettings() {
   const [addUserId, setAddUserId] = useState("")
   const [addRole, setAddRole] = useState("user")
   const [message, setMessage] = useState("")
-  const [generating, setGenerating] = useState(false)
-  const [indexResult, setIndexResult] = useState<string | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -86,18 +84,6 @@ export default function ProjectSettings() {
       const { data } = await api.get(`/projects/${id}/members`)
       setMembers(data)
     } catch {}
-  }
-
-  const handleGenerateIndex = async () => {
-    setGenerating(true)
-    setIndexResult(null)
-    try {
-      const { data } = await api.get(`/projects/${id}/generate-index`)
-      setIndexResult(`已生成索引，共 ${data.problems} 个问题。路径：${data.path}`)
-    } catch (err: any) {
-      setIndexResult(`生成失败：${err?.response?.data?.error || "未知错误"}`)
-    }
-    setGenerating(false)
   }
 
   // users not yet in the project
@@ -222,23 +208,6 @@ export default function ProjectSettings() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Index Generation */}
-      <div className="card" style={{ borderLeft: "3px solid var(--gray-300)" }}>
-        <h3 style={{ marginBottom: 10, fontWeight: 600 }}>Agent 检索索引</h3>
-        <p className="text-sm text-muted" style={{ marginBottom: 14 }}>
-          为此项目生成 L1（项目索引）和 L2（问题索引）文件，供 Agent 快速检索。
-        </p>
-        <div className="flex gap" style={{ alignItems: "center" }}>
-          <button onClick={handleGenerateIndex} disabled={generating} className="btn btn-outline btn-sm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            {generating ? "生成中..." : "生成索引"}
-          </button>
-          {indexResult && (
-            <span style={{ fontSize: 13, color: indexResult.startsWith("已生成") ? "#166534" : "#dc2626" }}>{indexResult}</span>
-          )}
-        </div>
       </div>
     </div>
   )

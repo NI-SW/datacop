@@ -1,8 +1,6 @@
 {
   "port": 8301,
   "apiKeys": [],
-  "jwt_secret": "datacop-mcp-secret-2024",
-  "jwt_ttl_hours": 24,
   "db": {
     "host": "192.168.34.65",
     "port": 3306,

@@ -8,7 +8,7 @@ import projectRoutes from "./routes/projects.ts"
 import problemRoutes from "./routes/problems.ts"
 import userRoutes from "./routes/users.ts"
 import settingRoutes from "./routes/settings.ts"
-import indexRoutes from "./routes/index.ts"
+import mcpKeyRoutes from "./routes/mcpKeys.ts"
 
 const app = express()
 const PORT = parseInt(process.env.PORT || "3001", 10)
@@ -17,11 +17,11 @@ app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173", crede
 app.use(express.json({ limit: "50mb" }))
 
 app.use("/api/auth", authRoutes)
-app.use("/api/projects", indexRoutes)
 app.use("/api/projects", projectRoutes)
 app.use("/api/projects", problemRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/settings", settingRoutes)
+app.use("/api/mcp-keys", mcpKeyRoutes)
 
 // Serve frontend static files in production
 const publicDir = path.resolve("public")

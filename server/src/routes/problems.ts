@@ -19,7 +19,9 @@ router.get("/:projectId/problems", requireAuth, requireProjectRead, async (req: 
     }
 
     if (q && typeof q === "string" && q.trim()) {
-      const keyword = `%${q.trim()}%`
+      // 转义 LIKE 通配符，避免 % 和 _ 被当作通配符匹配全部记录
+      const escaped = q.trim().replace(/[\\%_]/g, (m) => "\\" + m)
+      const keyword = `%${escaped}%`
       if (field && typeof field === "string" && ["name", "description", "scenario", "trigger_method", "symptoms", "cause", "solution", "verification", "notes"].includes(field)) {
         sql += ` AND ${field} LIKE ?`
         params.push(keyword)

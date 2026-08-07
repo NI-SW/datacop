@@ -40,6 +40,7 @@ export default function Layout() {
             <NavItem to="/" active={location.pathname === "/"}>项目列表</NavItem>
             {isAdmin && <NavItem to="/admin/projects" active={location.pathname.startsWith("/admin/projects")}>项目管理</NavItem>}
             {isAdmin && <NavItem to="/admin/users" active={location.pathname === "/admin/users"}>用户管理</NavItem>}
+            {isAdmin && <NavItem to="/admin/mcp-keys" active={location.pathname === "/admin/mcp-keys"}>密钥管理</NavItem>}
             {isRoot && <NavItem to="/admin/settings" active={location.pathname === "/admin/settings"}>系统设置</NavItem>}
           </nav>
         </div>
