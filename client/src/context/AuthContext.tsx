@@ -28,7 +28,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token && saved) {
       setUser(JSON.parse(saved))
     }
-    setLoading(false)
+    if (!token) {
+      setLoading(false)
+      return
+    }
+    // 用 /auth/me 校验 token 是否仍有效，并同步最新角色（管理员可能已调整）
+    api.get("/auth/me")
+      .then(({ data }) => {
+        setUser(data.user)
+        localStorage.setItem("user", JSON.stringify(data.user))
+      })
+      .catch(() => {
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
+        setToken(null)
+        setUser(null)
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   const login = async (username: string, password: string) => {

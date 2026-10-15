@@ -128,6 +128,24 @@ _db_key_cache: dict[str, dict] = {}
 _db_key_cache_time: float = 0
 _db_has_any_keys: bool = False  # mcp_api_keys 表是否有任何行（含禁用的）
 _DB_KEY_CACHE_TTL = 30
+_db_key_last_used_flush: dict[str, float] = {}  # key_hash -> 上次写 last_used_at 的时间
+_DB_KEY_LAST_USED_THROTTLE = 60  # 同一密钥 60 秒内最多写一次，避免每请求一写
+
+
+def _touch_db_key(key_hash: str) -> None:
+    """鉴权成功后异步节流地更新 mcp_api_keys.last_used_at。"""
+    now = time.time()
+    if now - _db_key_last_used_flush.get(key_hash, 0) < _DB_KEY_LAST_USED_THROTTLE:
+        return
+    _db_key_last_used_flush[key_hash] = now
+    try:
+        db = get_db()
+        with db.cursor() as cur:
+            cur.execute("UPDATE mcp_api_keys SET last_used_at = NOW() WHERE key_hash = %s", (key_hash,))
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f"[mcp] 更新 last_used_at 失败: {e}", file=sys.stderr)
 
 
 def _load_db_keys() -> dict[str, dict]:
@@ -163,7 +181,10 @@ def _load_db_keys() -> dict[str, dict]:
 def _verify_db_key(key: str) -> dict | None:
     """验证密钥是否在 DB 中且已启用，返回用户信息或 None。"""
     key_hash = hashlib.sha256(key.encode()).hexdigest()
-    return _load_db_keys().get(key_hash)
+    user = _load_db_keys().get(key_hash)
+    if user is not None:
+        _touch_db_key(key_hash)
+    return user
 
 
 # 当前请求的已认证用户（由 ApiKeyMiddleware 设置，工具函数通过 verify_auth 读取）
@@ -291,6 +312,8 @@ class ApiKeyMiddleware:
                 if key_hash in db_keys:
                     authenticated = True
                     user_info = db_keys[key_hash]
+                    # 命中 DB 密钥即记录最近使用时间（内部有 60s 节流）
+                    _touch_db_key(key_hash)
 
         if not authenticated:
             await _send_unauthorized(send)

@@ -127,6 +127,15 @@ export async function initDB() {
     console.log("Added status column to problems table")
   }
 
+  // Normalize legacy status values (early versions/importer could store solved,
+  // partially_resolved, ... which the UI cannot display or filter)
+  const [statusFix] = await conn.query(
+    "UPDATE problems SET status = 'pending' WHERE status IS NULL OR status NOT IN ('pending', 'valid')"
+  ) as [any, any]
+  if (statusFix.affectedRows > 0) {
+    console.log(`Normalized ${statusFix.affectedRows} legacy problem status values to 'pending'`)
+  }
+
   // Drop all foreign key constraints on problems table
   const [createTbl] = await conn.query("SHOW CREATE TABLE problems") as [any[], any]
   const ddl = createTbl[0]?.["Create Table"] || ""

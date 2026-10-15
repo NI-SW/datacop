@@ -31,4 +31,20 @@ router.put("/", requireAuth, requireRole("root"), async (req: Request, res: Resp
   }
 })
 
+router.delete("/:key", requireAuth, requireRole("root"), async (req: Request, res: Response) => {
+  try {
+    const [result] = await getPool().query(
+      "DELETE FROM system_settings WHERE key_name = ?",
+      [req.params.key]
+    ) as [any, any]
+    if (result.affectedRows === 0) {
+      res.status(404).json({ error: "设置项不存在" })
+      return
+    }
+    res.json({ message: "设置已删除" })
+  } catch {
+    res.status(500).json({ error: "服务器错误" })
+  }
+})
+
 export default router

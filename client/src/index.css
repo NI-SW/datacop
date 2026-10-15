@@ -65,6 +65,10 @@ textarea { resize: vertical; min-height: 80px; }
   transition: all .15s ease; white-space: nowrap;
 }
 .btn:active { transform: scale(.97); }
+.btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-hover); }
 .btn-danger { background: var(--danger); color: #fff; }
@@ -101,8 +105,8 @@ textarea { resize: vertical; min-height: 80px; }
 }
 
 /* Layout */
-.loading { text-align: center; padding: 80px; color: var(--gray-400); font-size: 15px; }
-.empty { text-align: center; padding: 48px; color: var(--gray-400); font-size: 14px; }
+.loading { text-align: center; padding: 80px; color: var(--gray-500); font-size: 15px; }
+.empty { text-align: center; padding: 48px; color: var(--gray-500); font-size: 14px; }
 .page-title { font-size: 22px; font-weight: 700; color: var(--gray-900); margin-bottom: 24px; letter-spacing: -.01em; }
 .page-subtitle { font-size: 13px; color: var(--gray-500); font-weight: 400; margin-left: 8px; }
 
@@ -135,6 +139,79 @@ textarea { resize: vertical; min-height: 80px; }
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
 .text-sm { font-size: 13px; }
 .text-muted { color: var(--gray-500); }
+.toolbar-wrap { flex-wrap: wrap; }
+.table-wrap { overflow-x: auto; }
+
+/* Toast */
+.toast-container {
+  position: fixed; top: 64px; right: 20px; z-index: 1000;
+  display: flex; flex-direction: column; gap: 8px;
+  max-width: min(420px, calc(100vw - 40px));
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 11px 16px; border-radius: var(--radius);
+  background: #fff; border: 1px solid var(--gray-200);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px; line-height: 1.5; color: var(--gray-700);
+  animation: toast-in .2s ease;
+  /* 容器为 pointer-events:none，这里恢复才能点关闭按钮 */
+  pointer-events: auto;
+}
+.toast-success { border-left: 3px solid #22c55e; }
+.toast-success svg { color: #16a34a; }
+.toast-error { border-left: 3px solid var(--danger); }
+.toast-error svg { color: var(--danger); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(17, 24, 39, .4);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.modal-card {
+  background: #fff; border-radius: var(--radius-lg);
+  padding: 24px; width: 100%; max-width: 420px;
+  box-shadow: var(--shadow-lg);
+}
+.modal-title { font-size: 16px; font-weight: 700; color: var(--gray-900); margin-bottom: 10px; }
+.modal-message { font-size: 14px; color: var(--gray-600); line-height: 1.6; margin-bottom: 20px; white-space: pre-wrap; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+/* Keyboard focus for interactive cards */
+[role="button"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* 无边框文本按钮（展开/收起等） */
+.btn-link {
+  background: none; border: none; padding: 0; font: inherit;
+  color: var(--primary); cursor: pointer; text-align: left;
+}
+.btn-link:hover { text-decoration: underline; }
+.btn-link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.toast-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; padding: 3px; margin: -2px -4px 0 0;
+  background: none; border: none; border-radius: 4px;
+  color: var(--gray-400); cursor: pointer;
+}
+.toast-close:hover { color: var(--gray-700); background: var(--gray-100); }
+
+/* 问题详情字段栅格 */
+.detail-grid { grid-template-columns: 1fr 1fr; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -146,4 +223,16 @@ textarea { resize: vertical; min-height: 80px; }
 @media (max-width: 768px) {
   .grid-2 { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr !important; }
+  main { padding: 20px 16px !important; }
+  header { padding: 0 16px !important; }
+}
+
+/* 顶栏在窄屏换行，避免导航与账号信息横向溢出 */
+@media (max-width: 900px) {
+  .app-header { height: auto !important; flex-wrap: wrap; padding: 8px 16px !important; gap: 8px; }
+  .app-header-inner { flex-wrap: wrap; gap: 12px !important; }
+  .app-header-nav { flex-wrap: wrap; }
+  .app-header-user { flex-wrap: wrap; }
+  .app-header-brand-name { display: none; }
 }

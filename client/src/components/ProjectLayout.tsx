@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useParams, Outlet, Link } from "react-router-dom"
 import api from "../api/client"
+import { apiError } from "../api/error"
 
 interface Project {
   id: number
@@ -12,12 +13,31 @@ export default function ProjectLayout() {
   const { id } = useParams<{ id: string }>()
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+  const [loadKey, setLoadKey] = useState(0)
 
   useEffect(() => {
-    api.get(`/projects/${id}`).then(({ data }) => setProject(data)).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+    setLoading(true)
+    setLoadError("")
+    api.get(`/projects/${id}`)
+      .then(({ data }) => setProject(data))
+      .catch((err) => setLoadError(apiError(err, "加载项目信息失败")))
+      .finally(() => setLoading(false))
+  }, [id, loadKey])
 
   if (loading) return <div className="loading">加载中...</div>
+
+  if (loadError) {
+    return (
+      <div className="empty">
+        <p style={{ marginBottom: 16 }}>{loadError}</p>
+        <div className="flex gap-sm" style={{ justifyContent: "center" }}>
+          <button onClick={() => setLoadKey((k) => k + 1)} className="btn btn-primary">重试</button>
+          <Link to="/" className="btn btn-outline">返回项目列表</Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>

@@ -196,7 +196,23 @@ router.get("/:id", requireAuth, requireProjectRead, async (req: Request, res: Re
       res.status(404).json({ error: "项目不存在" })
       return
     }
-    res.json(rows[0])
+    const project = rows[0]
+    // 计算当前用户在该项目内的有效角色，前端据此隐藏写操作入口
+    let myRole: "root" | "admin" | "operator" | "user" = req.user!.role === "root" || req.user!.role === "admin"
+      ? req.user!.role
+      : "user"
+    if (myRole === "user") {
+      if (project.operator_id === req.user!.id) {
+        myRole = "operator"
+      } else {
+        const [pm] = await getPool().query(
+          "SELECT role FROM project_members WHERE project_id = ? AND user_id = ?",
+          [req.params.id, req.user!.id]
+        ) as [any[], any]
+        if (pm.length > 0 && pm[0].role === "operator") myRole = "operator"
+      }
+    }
+    res.json({ ...project, my_role: myRole })
   } catch {
     res.status(500).json({ error: "服务器错误" })
   }

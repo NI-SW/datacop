@@ -1,5 +1,8 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom"
+import { createBrowserRouter, RouterProvider, Navigate, useParams } from "react-router-dom"
 import { AuthProvider } from "./context/AuthContext"
+import { ToastProvider } from "./components/Toast"
+import { ConfirmProvider } from "./components/ConfirmDialog"
+import ErrorBoundary from "./components/ErrorBoundary"
 import ProtectedRoute from "./components/ProtectedRoute"
 import Layout from "./components/Layout"
 import ProjectLayout from "./components/ProjectLayout"
@@ -9,6 +12,8 @@ import Dashboard from "./pages/Dashboard"
 import ProblemList from "./pages/ProblemList"
 import ProblemForm from "./pages/ProblemForm"
 import ProblemEdit from "./pages/ProblemEdit"
+import ProblemDetail from "./pages/ProblemDetail"
+import NotFound from "./pages/NotFound"
 import UserManagement from "./pages/admin/UserManagement"
 import ProjectManagement from "./pages/admin/ProjectManagement"
 import ProjectSettings from "./pages/admin/ProjectSettings"
@@ -20,31 +25,50 @@ function ProjectRedirect() {
   return <Navigate to={`/projects/${id}/problems`} replace />
 }
 
+// 使用 data router：表单页需要 useBlocker 做应用内未保存拦截，
+// 它在 <BrowserRouter> + <Routes> 下会抛 "must be used within a data router"
+const router = createBrowserRouter([
+  { path: "/login", element: <Login /> },
+  { path: "/register", element: <Register /> },
+  {
+    element: <ProtectedRoute />,
+    children: [
+      {
+        element: <Layout />,
+        children: [
+          { path: "/", element: <Dashboard /> },
+          {
+            element: <ProjectLayout />,
+            children: [
+              { path: "/projects/:id", element: <ProjectRedirect /> },
+              { path: "/projects/:id/problems", element: <ProblemList /> },
+              { path: "/projects/:id/problems/new", element: <ProblemForm /> },
+              { path: "/projects/:id/problems/:problemId", element: <ProblemDetail /> },
+              { path: "/projects/:id/problems/:problemId/edit", element: <ProblemEdit /> },
+            ],
+          },
+          { path: "/admin/users", element: <UserManagement /> },
+          { path: "/admin/projects", element: <ProjectManagement /> },
+          { path: "/admin/projects/:id/settings", element: <ProjectSettings /> },
+          { path: "/admin/settings", element: <SystemSettings /> },
+          { path: "/admin/mcp-keys", element: <ApiKeyManagement /> },
+          { path: "*", element: <NotFound /> },
+        ],
+      },
+    ],
+  },
+])
+
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route element={<ProtectedRoute />}>
-            <Route element={<Layout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route element={<ProjectLayout />}>
-                <Route path="/projects/:id" element={<ProjectRedirect />} />
-                <Route path="/projects/:id/problems" element={<ProblemList />} />
-                <Route path="/projects/:id/problems/new" element={<ProblemForm />} />
-                <Route path="/projects/:id/problems/:problemId/edit" element={<ProblemEdit />} />
-              </Route>
-              <Route path="/admin/users" element={<UserManagement />} />
-              <Route path="/admin/projects" element={<ProjectManagement />} />
-              <Route path="/admin/projects/:id/settings" element={<ProjectSettings />} />
-              <Route path="/admin/settings" element={<SystemSettings />} />
-              <Route path="/admin/mcp-keys" element={<ApiKeyManagement />} />
-            </Route>
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <ToastProvider>
+        <ConfirmProvider>
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+          </ErrorBoundary>
+        </ConfirmProvider>
+      </ToastProvider>
     </AuthProvider>
   )
 }

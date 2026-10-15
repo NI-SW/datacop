@@ -1,7 +1,10 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
 import api from "../../api/client"
+import { apiError } from "../../api/error"
 import { useAuth } from "../../context/AuthContext"
+import { useToast } from "../../components/Toast"
+import { useConfirm } from "../../components/ConfirmDialog"
 
 interface Project {
   id: number
@@ -9,6 +12,8 @@ interface Project {
   description: string
   operator_id: number | null
   created_at: string
+  pending_count: number
+  valid_count: number
 }
 
 interface User {
@@ -19,11 +24,15 @@ interface User {
 
 export default function ProjectManagement() {
   const nav = useNavigate()
+  const toast = useToast()
+  const confirm = useConfirm()
   const { user } = useAuth()
   const isRoot = user?.role === "root"
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
   const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ name: "", description: "", operator_id: "" })
   const [operators, setOperators] = useState<User[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -38,23 +47,44 @@ export default function ProjectManagement() {
     ]).then(([p, u]) => {
       setProjects(p.data)
       setOperators(u.data)
-    }).catch(() => {}).finally(() => setLoading(false))
+    }).catch((err) => setLoadError(apiError(err, "加载项目列表失败"))).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
 
-  const handleCreate = async () => {
+  const handleCreate = async (e?: FormEvent) => {
+    e?.preventDefault()
+    if (!form.name.trim()) {
+      toast.error("请填写项目名称")
+      return
+    }
+    setCreating(true)
     try {
       await api.post("/projects", { ...form, operator_id: form.operator_id ? Number(form.operator_id) : null })
+      toast.success("项目创建成功")
       setShowCreate(false)
       setForm({ name: "", description: "", operator_id: "" })
       load()
-    } catch {}
+    } catch (err) {
+      toast.error(apiError(err, "创建失败"))
+    }
+    setCreating(false)
   }
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("确定删除该项目？")) return
-    try { await api.delete(`/projects/${id}`); load() } catch {}
+  const handleDelete = async (p: Project) => {
+    const problemCount = (p.pending_count || 0) + (p.valid_count || 0)
+    const detail = problemCount > 0
+      ? `该项目下有 ${problemCount} 个问题，删除后将无法再通过界面访问。建议先导出问题集。`
+      : "删除后不可恢复。"
+    const ok = await confirm(`确定删除项目"${p.name}"？${detail}`, "删除项目")
+    if (!ok) return
+    try {
+      await api.delete(`/projects/${p.id}`)
+      toast.success("删除成功")
+      load()
+    } catch (err) {
+      toast.error(apiError(err, "删除失败"))
+    }
   }
 
   const toggleSelect = (pid: number) => {
@@ -66,7 +96,7 @@ export default function ProjectManagement() {
   }
 
   const toggleAll = () => {
-    if (selected.size === projects.length) {
+    if (projects.length > 0 && projects.every((p) => selected.has(p.id))) {
       setSelected(new Set())
     } else {
       setSelected(new Set(projects.map((p) => p.id)))
@@ -88,8 +118,9 @@ export default function ProjectManagement() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-    } catch (err: any) {
-      alert(err?.response?.data?.error || "导出失败")
+      toast.success("导出成功")
+    } catch (err) {
+      toast.error(apiError(err, "导出失败"))
     }
     setExporting(false)
   }
@@ -104,20 +135,20 @@ export default function ProjectManagement() {
       const data = JSON.parse(text)
       const projects = Array.isArray(data) ? data : data.projects
       if (!Array.isArray(projects) || projects.length === 0) {
-        alert("文件中没有项目数据")
+        toast.error("文件中没有项目数据")
         return
       }
       const { data: result } = await api.post("/projects/import", { projects })
-      const detail = [
-        result.message,
-        result.created_users?.length ? `新创建用户: ${result.created_users.join("、")}` : "",
-        result.reused_users?.length ? `复用已有用户: ${result.reused_users.join("、")}` : "",
-        result.results?.filter((r: any) => r.error)?.length ? `失败 ${result.results.filter((r: any) => r.error).length} 个` : "",
-      ].filter(Boolean).join("\n")
-      alert(detail)
+      toast.success(result.message || "导入成功")
+      if (result.created_users?.length) {
+        toast.success(`新创建用户: ${result.created_users.join("、")}（初始密码 Info@1234，请通知对方修改）`)
+      }
+      const failed = result.results?.filter((r: any) => r.error)?.length
+      if (failed) toast.error(`${failed} 个项目导入失败`)
       load()
-    } catch (err: any) {
-      alert(err?.response?.data?.error || "导入失败，请检查JSON文件格式")
+    } catch (err) {
+      if (err instanceof SyntaxError) toast.error("导入失败，请检查 JSON 文件格式")
+      else toast.error(apiError(err, "导入失败"))
     }
     setImporting(false)
     if (importRef.current) importRef.current.value = ""
@@ -127,9 +158,9 @@ export default function ProjectManagement() {
 
   return (
     <div>
-      <div className="flex-between mb-lg">
+      <div className="flex-between mb-lg toolbar-wrap">
         <h1 className="page-title">项目管理</h1>
-        <div className="flex gap-sm">
+        <div className="flex gap-sm toolbar-wrap">
           <button onClick={handleExport} disabled={selected.size === 0 || exporting} className="btn btn-outline">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             {exporting ? "导出中..." : selected.size > 0 ? `导出问题集 (${selected.size})` : "导出问题集"}
@@ -150,6 +181,13 @@ export default function ProjectManagement() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="card mb" style={{ borderLeft: "3px solid var(--danger)" }}>
+          <span style={{ color: "var(--danger)", fontSize: 13 }}>{loadError}</span>
+          <button onClick={load} className="btn btn-outline btn-sm" style={{ marginLeft: 12 }}>重试</button>
+        </div>
+      )}
+
       {selected.size > 0 && (
         <div className="card mb" style={{ padding: "8px 16px", fontSize: 13, color: "var(--gray-600)" }}>
           已选 {selected.size} 个项目
@@ -157,11 +195,11 @@ export default function ProjectManagement() {
       )}
 
       {showCreate && (
-        <div className="card mb" style={{ borderLeft: "3px solid var(--primary)" }}>
+        <form onSubmit={handleCreate} className="card mb" style={{ borderLeft: "3px solid var(--primary)" }}>
           <h3 style={{ marginBottom: 18, fontWeight: 600 }}>创建新项目</h3>
           <div className="form-group">
             <label>项目名称 *</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="输入项目名称" />
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="输入项目名称" autoFocus />
           </div>
           <div className="form-group">
             <label>项目描述</label>
@@ -177,21 +215,22 @@ export default function ProjectManagement() {
             </select>
           </div>
           <div className="flex gap-sm">
-            <button onClick={handleCreate} className="btn btn-primary btn-sm">创建</button>
-            <button onClick={() => setShowCreate(false)} className="btn btn-outline btn-sm">取消</button>
+            <button type="submit" disabled={creating} className="btn btn-primary btn-sm">{creating ? "创建中..." : "创建"}</button>
+            <button type="button" onClick={() => setShowCreate(false)} className="btn btn-outline btn-sm">取消</button>
           </div>
-        </div>
+        </form>
       )}
 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="card table-wrap" style={{ padding: 0 }}>
         <table className="table">
           <thead>
             <tr>
               <th style={{ width: 40 }}>
                 <input
                   type="checkbox"
-                  checked={selected.size === projects.length && projects.length > 0}
+                  checked={projects.length > 0 && projects.every((p) => selected.has(p.id))}
                   onChange={toggleAll}
+                  aria-label="全选项目"
                   style={{ width: 15, height: 15, cursor: "pointer" }}
                 />
               </th>
@@ -211,6 +250,7 @@ export default function ProjectManagement() {
                     type="checkbox"
                     checked={selected.has(p.id)}
                     onChange={() => toggleSelect(p.id)}
+                    aria-label={`选择项目 ${p.name}`}
                     style={{ width: 15, height: 15, cursor: "pointer" }}
                   />
                 </td>
@@ -222,10 +262,10 @@ export default function ProjectManagement() {
                 <td style={{ textAlign: "right" }}>
                   <div className="flex gap-sm" style={{ justifyContent: "flex-end" }}>
                     <button onClick={() => nav(`/admin/projects/${p.id}/settings`)} className="btn btn-outline btn-sm">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                       设置
                     </button>
-                    <button onClick={() => handleDelete(p.id)} className="btn btn-danger btn-sm">删除</button>
+                    <button onClick={() => handleDelete(p)} className="btn btn-danger btn-sm">删除</button>
                   </div>
                 </td>
               </tr>

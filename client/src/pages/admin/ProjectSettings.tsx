@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { useParams, Link } from "react-router-dom"
 import api from "../../api/client"
+import { apiError } from "../../api/error"
+import { useToast } from "../../components/Toast"
+import { useConfirm } from "../../components/ConfirmDialog"
 
 interface Project {
   id: number
@@ -25,19 +28,24 @@ interface User {
 
 export default function ProjectSettings() {
   const { id } = useParams<{ id: string }>()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [project, setProject] = useState<Project | null>(null)
   const [members, setMembers] = useState<Member[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [operatorId, setOperatorId] = useState("")
   const [addUserId, setAddUserId] = useState("")
   const [addRole, setAddRole] = useState("user")
-  const [message, setMessage] = useState("")
+  const [loadKey, setLoadKey] = useState(0)
 
   useEffect(() => {
+    setLoading(true)
+    setLoadError("")
     Promise.all([
       api.get(`/projects/${id}`),
       api.get(`/projects/${id}/members`),
@@ -49,20 +57,26 @@ export default function ProjectSettings() {
       setOperatorId(p.data.operator_id?.toString() || "")
       setMembers(m.data)
       setAllUsers(u.data)
-    }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+    }).catch((err) => setLoadError(apiError(err, "加载项目设置失败"))).finally(() => setLoading(false))
+  }, [id, loadKey])
 
-  const handleSaveProject = async () => {
+  const handleSaveProject = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) {
+      toast.error("项目名称不能为空")
+      return
+    }
     setSaving(true)
-    setMessage("")
     try {
       await api.put(`/projects/${id}`, {
         name,
         description,
         operator_id: operatorId ? Number(operatorId) : null,
       })
-      setMessage("项目信息已更新")
-    } catch {}
+      toast.success("项目信息已更新")
+    } catch (err) {
+      toast.error(apiError(err, "保存失败"))
+    }
     setSaving(false)
   }
 
@@ -70,20 +84,27 @@ export default function ProjectSettings() {
     if (!addUserId) return
     try {
       await api.post(`/projects/${id}/members`, { user_id: Number(addUserId), role: addRole })
+      toast.success("成员添加成功")
       setAddUserId("")
       setAddRole("user")
       const { data } = await api.get(`/projects/${id}/members`)
       setMembers(data)
-    } catch {}
+    } catch (err) {
+      toast.error(apiError(err, "添加成员失败"))
+    }
   }
 
-  const handleRemoveMember = async (userId: number) => {
-    if (!confirm("确定移除该成员？")) return
+  const handleRemoveMember = async (member: Member) => {
+    const ok = await confirm(`确定把用户"${member.username}"移出该项目？移除后其将无法访问该项目。`, "移除成员")
+    if (!ok) return
     try {
-      await api.delete(`/projects/${id}/members/${userId}`)
+      await api.delete(`/projects/${id}/members/${member.id}`)
+      toast.success("成员已移除")
       const { data } = await api.get(`/projects/${id}/members`)
       setMembers(data)
-    } catch {}
+    } catch (err) {
+      toast.error(apiError(err, "移除成员失败"))
+    }
   }
 
   // users not yet in the project
@@ -91,6 +112,21 @@ export default function ProjectSettings() {
   const availableUsers = allUsers.filter((u) => !memberIds.has(u.id))
 
   if (loading) return <div className="loading">加载中...</div>
+
+  if (loadError) {
+    return (
+      <div>
+        <div className="flex-between mb-lg">
+          <h1 className="page-title">项目设置</h1>
+          <Link to="/admin/projects" className="btn btn-outline">返回项目管理</Link>
+        </div>
+        <div className="empty">
+          <p style={{ marginBottom: 16 }}>{loadError}</p>
+          <button onClick={() => setLoadKey((k) => k + 1)} className="btn btn-primary">重试</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -102,14 +138,8 @@ export default function ProjectSettings() {
         <Link to="/admin/projects" className="btn btn-outline">返回项目管理</Link>
       </div>
 
-      {message && (
-        <div style={{ color: "#166534", background: "#f0fdf4", padding: "10px 14px", borderRadius: 8, marginBottom: 20, fontSize: 13, border: "1px solid #bbf7d0" }}>
-          {message}
-        </div>
-      )}
-
       {/* Basic Info */}
-      <div className="card mb" style={{ borderLeft: "3px solid var(--primary)" }}>
+      <form onSubmit={handleSaveProject} className="card mb" style={{ borderLeft: "3px solid var(--primary)" }}>
         <h3 style={{ marginBottom: 18, fontWeight: 600 }}>基本信息</h3>
         <div className="form-group">
           <label>项目名称</label>
@@ -128,10 +158,10 @@ export default function ProjectSettings() {
             ))}
           </select>
         </div>
-        <button onClick={handleSaveProject} disabled={saving} className="btn btn-primary btn-sm">
+        <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
           {saving ? "保存中..." : "保存修改"}
         </button>
-      </div>
+      </form>
 
       {/* Members */}
       <div className="card mb">
@@ -140,7 +170,7 @@ export default function ProjectSettings() {
         {members.length === 0 ? (
           <p className="text-sm text-muted" style={{ marginBottom: 16 }}>暂无项目成员（管理员通过 operator_id 关联）</p>
         ) : (
-          <div style={{ marginBottom: 20 }}>
+          <div className="table-wrap" style={{ marginBottom: 20 }}>
             <table className="table">
               <thead>
                 <tr>
@@ -175,7 +205,7 @@ export default function ProjectSettings() {
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <button onClick={() => handleRemoveMember(m.id)} className="btn btn-danger btn-sm">移除</button>
+                      <button onClick={() => handleRemoveMember(m)} className="btn btn-danger btn-sm">移除</button>
                     </td>
                   </tr>
                 ))}

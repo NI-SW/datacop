@@ -1,14 +1,23 @@
-import { useState, type FormEvent } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useState, useEffect, type FormEvent } from "react"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
+import { apiError } from "../api/error"
 
 export default function Login() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const { login, user } = useAuth()
   const nav = useNavigate()
+  const [searchParams] = useSearchParams()
+  const expired = searchParams.get("expired") === "1"
+  const returnTo = searchParams.get("returnTo") || "/"
+
+  // 已登录用户访问登录页直接回跳
+  useEffect(() => {
+    if (user) nav(returnTo, { replace: true })
+  }, [user, nav, returnTo])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -16,9 +25,9 @@ export default function Login() {
     setLoading(true)
     try {
       await login(username, password)
-      nav("/")
-    } catch (err: any) {
-      setError(err.response?.data?.error || "登录失败")
+      nav(returnTo)
+    } catch (err: unknown) {
+      setError(apiError(err, "登录失败"))
     }
     setLoading(false)
   }
@@ -41,6 +50,11 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="card" style={{ padding: 32 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 24, textAlign: "center", color: "var(--gray-800)" }}>登录账号</h2>
+          {expired && !error && (
+            <div style={{ color: "#92400e", background: "#fffbeb", padding: "10px 14px", borderRadius: 8, marginBottom: 20, fontSize: 13, border: "1px solid #fde68a" }}>
+              登录已过期，请重新登录
+            </div>
+          )}
           {error && (
             <div style={{ color: "#dc2626", background: "#fef2f2", padding: "10px 14px", borderRadius: 8, marginBottom: 20, fontSize: 13, border: "1px solid #fecaca" }}>
               {error}

@@ -1,13 +1,24 @@
-import { useState, type FormEvent } from "react"
-import { useParams, useNavigate, Link } from "react-router-dom"
+import { useState, useRef, type FormEvent } from "react"
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom"
 import api from "../api/client"
+import { apiError } from "../api/error"
+import { useToast } from "../components/Toast"
+import { useUnsavedChanges } from "../hooks/useUnsavedChanges"
 
 export default function ProblemForm() {
   const { id } = useParams<{ id: string }>()
   const nav = useNavigate()
+  const location = useLocation()
+  const toast = useToast()
   const [form, setForm] = useState({ name: "", description: "", scenario: "", trigger_method: "", symptoms: "", cause: "", solution: "", verification: "", notes: "" })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const initialRef = useRef(JSON.stringify(form))
+
+  const dirty = JSON.stringify(form) !== initialRef.current
+  const markSaved = useUnsavedChanges(dirty)
+
+  const backUrl = `/projects/${id}/problems${location.search}`
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -19,10 +30,11 @@ export default function ProblemForm() {
     setSubmitting(true)
     try {
       await api.post(`/projects/${id}/problems`, form)
-      nav(`/projects/${id}/problems`)
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || "上传失败，请重试"
-      setError(msg)
+      toast.success("问题创建成功")
+      markSaved()
+      nav(backUrl)
+    } catch (err: unknown) {
+      setError(apiError(err, "创建失败，请重试"))
       setSubmitting(false)
     }
   }
@@ -32,8 +44,8 @@ export default function ProblemForm() {
   return (
     <div>
       <div className="flex-between mb-lg">
-        <h1 className="page-title">上传问题</h1>
-        <Link to={`/projects/${id}/problems`} className="btn btn-outline">返回列表</Link>
+        <h1 className="page-title">新增问题</h1>
+        <Link to={backUrl} className="btn btn-outline">返回列表</Link>
       </div>
 
       <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 900 }}>
@@ -45,7 +57,7 @@ export default function ProblemForm() {
 
         <div className="form-group">
           <label>问题名称 *</label>
-          <input value={form.name} onChange={set("name")} placeholder="请输入问题名称" />
+          <input value={form.name} onChange={set("name")} placeholder="请输入问题名称" autoFocus />
         </div>
 
         <div className="form-group">
@@ -85,10 +97,11 @@ export default function ProblemForm() {
           <textarea value={form.notes} onChange={set("notes")} placeholder="其他相关信息" />
         </div>
 
-        <div style={{ borderTop: "1px solid var(--gray-100)", paddingTop: 20, marginTop: 8 }}>
+        <div style={{ borderTop: "1px solid var(--gray-100)", paddingTop: 20, marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
           <button type="submit" disabled={submitting} className="btn btn-primary" style={{ height: 42, paddingInline: 24, fontSize: 14 }}>
-            {submitting ? "上传中..." : "上传问题"}
+            {submitting ? "保存中..." : "创建问题"}
           </button>
+          {dirty && <span style={{ fontSize: 12, color: "var(--gray-400)" }}>有未保存的修改</span>}
         </div>
       </form>
     </div>

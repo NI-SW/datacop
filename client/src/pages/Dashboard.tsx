@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import api from "../api/client"
+import { apiError } from "../api/error"
 
 interface Project {
   id: number
@@ -15,13 +16,32 @@ interface Project {
 export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+  const [loadKey, setLoadKey] = useState(0)
   const nav = useNavigate()
 
   useEffect(() => {
-    api.get("/projects").then(({ data }) => setProjects(data)).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+    setLoading(true)
+    setLoadError("")
+    api.get("/projects")
+      .then(({ data }) => setProjects(data))
+      .catch((err) => setLoadError(apiError(err, "加载项目列表失败")))
+      .finally(() => setLoading(false))
+  }, [loadKey])
 
   if (loading) return <div className="loading">加载中...</div>
+
+  if (loadError) {
+    return (
+      <div>
+        <h1 className="page-title">我的项目</h1>
+        <div className="empty">
+          <p style={{ marginBottom: 16 }}>{loadError}</p>
+          <button onClick={() => setLoadKey((k) => k + 1)} className="btn btn-primary">重试</button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -34,8 +54,11 @@ export default function Dashboard() {
             <div
               key={p.id}
               className="card card-hover"
+              role="button"
+              tabIndex={0}
               style={{ cursor: "pointer", display: "flex", flexDirection: "column", gap: 12 }}
               onClick={() => nav(`/projects/${p.id}`)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); nav(`/projects/${p.id}`) } }}
             >
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                 <div style={{

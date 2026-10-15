@@ -1,9 +1,26 @@
 import { Router, Request, Response } from "express"
 import bcrypt from "bcryptjs"
 import { getPool } from "../db/connection.ts"
-import { signToken } from "../middleware/auth.ts"
+import { signToken, requireAuth } from "../middleware/auth.ts"
 
 const router = Router()
+
+// Validate current token and return fresh user info (role may have changed)
+router.get("/me", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const [rows] = await getPool().query(
+      "SELECT id, username, role FROM users WHERE id = ?",
+      [req.user!.id]
+    ) as [any[], any]
+    if (rows.length === 0) {
+      res.status(401).json({ error: "账号不存在" })
+      return
+    }
+    res.json({ user: rows[0] })
+  } catch {
+    res.status(500).json({ error: "服务器错误" })
+  }
+})
 
 router.post("/login", async (req: Request, res: Response) => {
   const { username, password } = req.body

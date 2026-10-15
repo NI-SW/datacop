@@ -64,6 +64,21 @@ Authorization: Bearer <token>
 
 ---
 
+### GET `/api/auth/me` — 校验当前 token
+**权限:** 登录用户（`Authorization: Bearer <token>`）
+
+用于前端启动时校验 token 是否有效，并获取最新用户信息（角色可能已被管理员调整）。
+
+成功响应 (200)：
+```json
+{ "user": { "id": 1, "username": "root", "role": "root" } }
+```
+
+错误响应：
+- 401: `{ "error": "未登录" }` / `{ "error": "登录已过期" }` / `{ "error": "账号不存在" }`
+
+---
+
 ## 2. 用户管理 (`/api/users`)
 
 ### GET `/api/users` — 用户列表
@@ -95,6 +110,11 @@ Authorization: Bearer <token>
 
 角色可选值：`root` | `admin` | `operator` | `user`（默认 `user`）
 
+错误响应：
+- 400: `{ "error": "用户名和密码不能为空" }`
+- 400: `{ "error": "密码至少6位" }`
+- 409: `{ "error": "用户名已存在" }`
+
 ---
 
 ### PUT `/api/users/:id` — 更新用户
@@ -119,12 +139,28 @@ Authorization: Bearer <token>
 
 成功响应 (200)：`{ "message": "更新成功" }`
 
+错误响应：
+- 400: `{ "error": "密码至少6位" }`（提供密码时）
+- 400: `{ "error": "无效的角色" }`（role 不在 root/admin/operator/user 内）
+- 400: `{ "error": "不能取消最后一个 root 账号的管理员角色" }`（把最后一个 root 改成其他角色）
+- 404: `{ "error": "用户不存在" }`
+- 409: `{ "error": "用户名已存在" }`
+
 ---
 
 ### DELETE `/api/users/:id` — 删除用户
 **权限:** root
 
+防呆限制：
+- 不能删除当前登录的账号
+- 不能删除最后一个 root 账号
+
 成功响应 (200)：`{ "message": "删除成功" }`
+
+错误响应：
+- 400: `{ "error": "不能删除当前登录的账号" }`
+- 400: `{ "error": "不能删除最后一个 root 账号" }`
+- 404: `{ "error": "用户不存在" }`
 
 ---
 
@@ -170,7 +206,7 @@ Authorization: Bearer <token>
 ### GET `/api/projects/:id` — 项目详情
 **权限:** 项目成员 / root / admin
 
-响应 (200)：
+响应 (200)（`my_role` 为当前用户在该项目内的有效角色，前端据此隐藏写操作入口）：
 ```json
 {
   "id": 2,
@@ -178,9 +214,12 @@ Authorization: Bearer <token>
   "description": "stream-questions",
   "operator_id": 2,
   "created_at": "2026-07-26T...",
-  "updated_at": "2026-07-26T..."
+  "updated_at": "2026-07-26T...",
+  "my_role": "operator"
 }
 ```
+
+`my_role` 取值：`root` / `admin`（全局角色）/ `operator`（项目 operator 或 members 中 role=operator）/ `user`（只读成员）
 
 ---
 
@@ -345,47 +384,43 @@ Authorization: Bearer <token>
 
 ## 5. 问题管理 (`/api/projects/:projectId/problems`)
 
-### GET `/api/projects/:projectId/problems` — 问题列表（支持搜索和筛选）
+### GET `/api/projects/:projectId/problems` — 问题列表（支持搜索、筛选、排序、分页）
 **权限:** 项目成员 / root / admin
 
 查询参数：
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| q | string | 搜索关键词（模糊匹配所有字段） |
-| field | string | 指定搜索字段（精确匹配该字段） |
+| q | string | 搜索关键词（按空格拆词，每个词都要命中；未指定 field 时模糊匹配所有字段） |
+| field | string | 指定搜索字段（匹配该字段） |
 | status | string | 状态筛选：`pending`（待定）/ `valid`（已保留） |
+| sort | string | 排序字段：`created_at`（默认）/ `updated_at` / `name` |
+| order | string | `asc` / `desc`（默认 `desc`；sort=name 时前端传 asc） |
+| page | number | 页码（从 1 开始）。**传 page 或 pageSize 即启用分页** |
+| pageSize | number | 每页条数（默认 20，最大 100） |
 
 `field` 可选值：`name`, `description`, `scenario`, `trigger_method`, `symptoms`, `cause`, `solution`, `verification`, `notes`
 
 示例：
 ```
 GET /api/projects/2/problems?q=部署&field=name
-GET /api/projects/2/problems?status=valid
-GET /api/projects/2/problems?q=部署&status=pending
+GET /api/projects/2/problems?status=valid&page=1&pageSize=20
+GET /api/projects/2/problems?q=连接 超时&sort=updated_at
+GET /api/projects/2/problems            # 不传分页参数返回完整数组（导出用）
 ```
 
-响应 (200)：
+分页响应 (200)（传了 page/pageSize 时）：
 ```json
-[
-  {
-    "id": 1,
-    "project_id": 2,
-    "name": "部署问题1",
-    "description": "部署时遇到1号错误",
-    "scenario": "生产环境部署",
-    "trigger_method": "手动触发",
-    "symptoms": "服务启动失败",
-    "cause": "配置文件缺失",
-    "solution": "重新部署",
-    "verification": "服务正常启动",
-    "notes": "",
-    "status": "pending",
-    "created_by": 1,
-    "created_at": "2026-07-27T...",
-    "updated_at": "2026-07-27T..."
-  }
-]
+{
+  "items": [ { "id": 1, "project_id": 2, "name": "部署问题1", "...": "...", "status": "pending", "created_by_username": "root", "created_at": "...", "updated_at": "..." } ],
+  "total": 53,
+  "page": 1,
+  "pageSize": 20
+}
 ```
+
+每条问题额外返回 `created_by_username`（LEFT JOIN users；`created_by` 仍为用户 ID），单条查询接口同。
+
+未传分页参数时响应为数组（与旧版兼容，供导出使用）。`status` 仅可能取 `pending` / `valid`，历史遗留的其他取值会在服务启动迁移时归一化为 `pending`。
 
 ---
 
@@ -513,9 +548,17 @@ GET /api/projects/2/problems?q=部署&status=pending
 }
 ```
 
-成功响应 (200)：`{ "message": "设置已更新" }`
+成功响应 (200)：`{ "message": "设置已更新" }`（key 已存在时覆盖，即 upsert）
 
 ---
+
+### DELETE `/api/settings/:key` — 删除设置项
+**权限:** root
+
+成功响应 (200)：`{ "message": "设置已删除" }`
+
+错误响应：
+- 404: `{ "error": "设置项不存在" }`
 
 ## 数据库表结构
 

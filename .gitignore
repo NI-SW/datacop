@@ -4,3 +4,12 @@ server/uploads/
 .env
 .env.*
 mcp/python/uv.lock
+
+# Build artifacts & local runtime junk
+build/
+client/dist/
+client/tsconfig.tsbuildinfo
+*.tar
+nohup.out
+__pycache__/
+.mimocode/

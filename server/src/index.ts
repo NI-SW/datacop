@@ -23,6 +23,11 @@ app.use("/api/users", userRoutes)
 app.use("/api/settings", settingRoutes)
 app.use("/api/mcp-keys", mcpKeyRoutes)
 
+// Unmatched /api paths must return JSON, not the SPA fallback HTML
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "接口不存在" })
+})
+
 // Serve frontend static files in production
 const publicDir = path.resolve("public")
 app.use(express.static(publicDir))

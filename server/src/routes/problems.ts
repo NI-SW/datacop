@@ -5,33 +5,64 @@ import { requireRole, requireProjectRead, requireProjectWrite } from "../middlew
 
 const router = Router()
 
-// List problems with optional search and status filter
+const SEARCHABLE_FIELDS = ["name", "description", "scenario", "trigger_method", "symptoms", "cause", "solution", "verification", "notes"]
+
+// List problems with optional search, status filter, sorting and pagination
+// Pagination is opt-in: pass page/pageSize to get { items, total, page, pageSize },
+// otherwise the full array is returned (used by export).
 router.get("/:projectId/problems", requireAuth, requireProjectRead, async (req: Request, res: Response) => {
   try {
-    const { q, field, status } = req.query
-    let sql = "SELECT * FROM problems WHERE project_id = ?"
+    const { q, field, status, page, pageSize, sort, order } = req.query
+    // 关联 users 以便前端展示创建者；problems/users 都有 id/created_at，故列名必须带 p. 前缀
+    let sql = `SELECT p.*, u.username AS created_by_username
+       FROM problems p LEFT JOIN users u ON u.id = p.created_by
+       WHERE p.project_id = ?`
+    let countSql = "SELECT COUNT(*) AS total FROM problems WHERE project_id = ?"
     const params: any[] = [req.params.projectId]
 
     // status filter
     if (status && typeof status === "string" && ["pending", "valid"].includes(status)) {
       sql += " AND status = ?"
+      countSql += " AND status = ?"
       params.push(status)
     }
 
     if (q && typeof q === "string" && q.trim()) {
-      // 转义 LIKE 通配符，避免 % 和 _ 被当作通配符匹配全部记录
-      const escaped = q.trim().replace(/[\\%_]/g, (m) => "\\" + m)
-      const keyword = `%${escaped}%`
-      if (field && typeof field === "string" && ["name", "description", "scenario", "trigger_method", "symptoms", "cause", "solution", "verification", "notes"].includes(field)) {
-        sql += ` AND ${field} LIKE ?`
-        params.push(keyword)
-      } else {
-        sql += ` AND (name LIKE ? OR description LIKE ? OR scenario LIKE ? OR trigger_method LIKE ? OR symptoms LIKE ? OR cause LIKE ? OR solution LIKE ? OR verification LIKE ? OR notes LIKE ?)`
-        params.push(keyword, keyword, keyword, keyword, keyword, keyword, keyword, keyword, keyword)
+      // 按空白拆词，每个词都要命中（AND），词内再按字段匹配（OR）
+      const terms = q.trim().split(/\s+/)
+      const useField = field && typeof field === "string" && SEARCHABLE_FIELDS.includes(field)
+      for (const term of terms) {
+        // 转义 LIKE 通配符，避免 % 和 _ 被当作通配符匹配全部记录
+        const keyword = `%${term.replace(/[\\%_]/g, (m) => "\\" + m)}%`
+        if (useField) {
+          sql += ` AND ${field} LIKE ?`
+          countSql += ` AND ${field} LIKE ?`
+          params.push(keyword)
+        } else {
+          const clause = ` AND (${SEARCHABLE_FIELDS.map((f) => `${f} LIKE ?`).join(" OR ")})`
+          sql += clause
+          countSql += clause
+          params.push(...SEARCHABLE_FIELDS.map(() => keyword))
+        }
       }
     }
 
-    sql += " ORDER BY created_at DESC"
+    const sortWhitelist = ["created_at", "updated_at", "name"]
+    const sortCol = sort && typeof sort === "string" && sortWhitelist.includes(sort) ? sort : "created_at"
+    const sortOrder = order === "asc" ? "ASC" : "DESC"
+    sql += ` ORDER BY p.${sortCol} ${sortOrder}, p.id DESC`
+
+    const paginated = page !== undefined || pageSize !== undefined
+    if (paginated) {
+      const size = Math.min(Math.max(Number(pageSize) || 20, 1), 100)
+      const offset = (Math.max(Number(page) || 1, 1) - 1) * size
+      sql += " LIMIT ? OFFSET ?"
+      const [rows] = await getPool().query(sql, [...params, size, offset]) as [any[], any]
+      const [countRows] = await getPool().query(countSql, params) as [any[], any]
+      res.json({ items: rows, total: countRows[0].total, page: Math.floor(offset / size) + 1, pageSize: size })
+      return
+    }
+
     const [rows] = await getPool().query(sql, params) as [any[], any]
     res.json(rows)
   } catch {
@@ -62,7 +93,9 @@ router.post("/:projectId/problems", requireAuth, requireProjectWrite, async (req
 router.get("/:projectId/problems/:id", requireAuth, requireProjectRead, async (req: Request, res: Response) => {
   try {
     const [rows] = await getPool().query(
-      "SELECT * FROM problems WHERE id = ? AND project_id = ?",
+      `SELECT p.*, u.username AS created_by_username
+       FROM problems p LEFT JOIN users u ON u.id = p.created_by
+       WHERE p.id = ? AND p.project_id = ?`,
       [req.params.id, req.params.projectId]
     ) as [any[], any]
     if (rows.length === 0) {
